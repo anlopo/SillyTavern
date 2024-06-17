@@ -4,7 +4,10 @@ FROM node:lts-alpine3.18
 ARG APP_HOME=/home/node/app
 
 # Install system dependencies
-RUN apk add gcompat tini git
+RUN apk --no-cache add gcompat tini git
+
+# Clean image
+RUN rm -rf /usr/share/man /usr/share/doc /usr/share/info /var/cache/apk/*
 
 # Ensure proper handling of kernel signals
 ENTRYPOINT [ "tini", "--" ]
@@ -35,6 +38,7 @@ RUN \
   echo "*** Cleanup ***" && \
   mv "./docker/docker-entrypoint.sh" "./" && \
   rm -rf "./docker" && \
+  rm -rf "./Dockerfile" && \
   echo "*** Make docker-entrypoint.sh executable ***" && \
   chmod +x "./docker-entrypoint.sh" && \
   echo "*** Convert line endings to Unix format ***" && \

@@ -31,6 +31,8 @@ import { SlashCommand } from '../../slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from '../../slash-commands/SlashCommandArgument.js';
 import { resolveVariable } from '../../variables.js';
 import { debounce_timeout } from '../../constants.js';
+import { commonEnumProviders } from '../../slash-commands/SlashCommandCommonEnumsProvider.js';
+import { SlashCommandEnumValue } from '../../slash-commands/SlashCommandEnumValue.js';
 export { MODULE_NAME };
 
 const MODULE_NAME = 'sd';
@@ -438,7 +440,7 @@ async function loadSettings() {
     $('#sd_comfy_prompt').val(extension_settings.sd.comfy_prompt);
     $('#sd_snap').prop('checked', extension_settings.sd.snap);
     $('#sd_clip_skip').val(extension_settings.sd.clip_skip);
-    $('#sd_clip_skip_value').text(extension_settings.sd.clip_skip);
+    $('#sd_clip_skip_value').val(extension_settings.sd.clip_skip);
     $('#sd_seed').val(extension_settings.sd.seed);
     $('#sd_free_extend').prop('checked', extension_settings.sd.free_extend);
     $('#sd_wand_visible').prop('checked', extension_settings.sd.wand_visible);
@@ -711,7 +713,7 @@ function onChatChanged() {
     adjustElementScrollHeight();
 }
 
-function adjustElementScrollHeight(){
+function adjustElementScrollHeight() {
     if (!$('.sd_settings').is(':visible')) {
         return;
     }
@@ -821,7 +823,7 @@ function onInteractiveVisibleInput() {
 
 function onClipSkipInput() {
     extension_settings.sd.clip_skip = Number($('#sd_clip_skip').val());
-    $('#sd_clip_skip_value').text(extension_settings.sd.clip_skip);
+    $('#sd_clip_skip_value').val(extension_settings.sd.clip_skip);
     saveSettingsDebounced();
 }
 
@@ -832,13 +834,13 @@ function onSeedInput() {
 
 function onScaleInput() {
     extension_settings.sd.scale = Number($('#sd_scale').val());
-    $('#sd_scale_value').text(extension_settings.sd.scale.toFixed(1));
+    $('#sd_scale_value').val(extension_settings.sd.scale.toFixed(1));
     saveSettingsDebounced();
 }
 
 function onStepsInput() {
     extension_settings.sd.steps = Number($('#sd_steps').val());
-    $('#sd_steps_value').text(extension_settings.sd.steps);
+    $('#sd_steps_value').val(extension_settings.sd.steps);
     saveSettingsDebounced();
 }
 
@@ -901,13 +903,23 @@ function onSchedulerChange() {
 
 function onWidthInput() {
     extension_settings.sd.width = Number($('#sd_width').val());
-    $('#sd_width_value').text(extension_settings.sd.width);
+    $('#sd_width_value').val(extension_settings.sd.width);
     saveSettingsDebounced();
 }
 
 function onHeightInput() {
     extension_settings.sd.height = Number($('#sd_height').val());
-    $('#sd_height_value').text(extension_settings.sd.height);
+    $('#sd_height_value').val(extension_settings.sd.height);
+    saveSettingsDebounced();
+}
+
+function onSwapDimensionsClick() {
+    const w = extension_settings.sd.height;
+    const h = extension_settings.sd.width;
+    extension_settings.sd.width = w;
+    extension_settings.sd.height = h;
+    $('#sd_width').val(w).trigger('input');
+    $('#sd_height').val(h).trigger('input');
     saveSettingsDebounced();
 }
 
@@ -947,7 +959,7 @@ async function onViewAnlasClick() {
 
 function onNovelUpscaleRatioInput() {
     extension_settings.sd.novel_upscale_ratio = Number($('#sd_novel_upscale_ratio').val());
-    $('#sd_novel_upscale_ratio_value').text(extension_settings.sd.novel_upscale_ratio.toFixed(1));
+    $('#sd_novel_upscale_ratio_value').val(extension_settings.sd.novel_upscale_ratio.toFixed(1));
     saveSettingsDebounced();
 }
 
@@ -1049,19 +1061,19 @@ function onHrUpscalerChange() {
 
 function onHrScaleInput() {
     extension_settings.sd.hr_scale = Number($('#sd_hr_scale').val());
-    $('#sd_hr_scale_value').text(extension_settings.sd.hr_scale.toFixed(1));
+    $('#sd_hr_scale_value').val(extension_settings.sd.hr_scale.toFixed(1));
     saveSettingsDebounced();
 }
 
 function onDenoisingStrengthInput() {
     extension_settings.sd.denoising_strength = Number($('#sd_denoising_strength').val());
-    $('#sd_denoising_strength_value').text(extension_settings.sd.denoising_strength.toFixed(2));
+    $('#sd_denoising_strength_value').val(extension_settings.sd.denoising_strength.toFixed(2));
     saveSettingsDebounced();
 }
 
 function onHrSecondPassStepsInput() {
     extension_settings.sd.hr_second_pass_steps = Number($('#sd_hr_second_pass_steps').val());
-    $('#sd_hr_second_pass_steps_value').text(extension_settings.sd.hr_second_pass_steps);
+    $('#sd_hr_second_pass_steps_value').val(extension_settings.sd.hr_second_pass_steps);
     saveSettingsDebounced();
 }
 
@@ -3339,11 +3351,14 @@ jQuery(async () => {
         aliases: ['sd', 'img', 'image'],
         namedArgumentList: [
             new SlashCommandNamedArgument(
-                'quiet', 'whether to post the generated image to chat', [ARGUMENT_TYPE.BOOLEAN], false, false, 'false', ['false', 'true'],
+                'quiet', 'whether to post the generated image to chat', [ARGUMENT_TYPE.BOOLEAN], false, false, 'false',
             ),
-            new SlashCommandNamedArgument(
-                'negative', 'negative prompt prefix', [ARGUMENT_TYPE.STRING], false, false, '',
-            ),
+            SlashCommandNamedArgument.fromProps({
+                name: 'negative',
+                description: 'negative prompt prefix',
+                typeList: [ARGUMENT_TYPE.STRING, ARGUMENT_TYPE.VARIABLE_NAME],
+                enumProvider: commonEnumProviders.variables('all'),
+            }),
         ],
         unnamedArgumentList: [
             new SlashCommandArgument(
@@ -3352,7 +3367,7 @@ jQuery(async () => {
         ],
         helpString: `
             <div>
-                Requests to generate an image and posts it to chat (unless quiet=true argument is specified). Supported arguments: <code>${Object.values(triggerWords).flat().join(', ')}</code>.
+                Requests to generate an image and posts it to chat (unless <code>quiet=true</code> argument is specified).</code>.
             </div>
             <div>
                 Anything else would trigger a "free mode" to make generate whatever you prompted. Example: <code>/imagine apple tree</code> would generate a picture of an apple tree. Returns a link to the generated image.
@@ -3365,9 +3380,12 @@ jQuery(async () => {
         callback: changeComfyWorkflow,
         aliases: ['icw'],
         unnamedArgumentList: [
-            new SlashCommandArgument(
-                'workflowName', [ARGUMENT_TYPE.STRING], true,
-            ),
+            SlashCommandArgument.fromProps({
+                description: 'workflow name',
+                typeList: [ARGUMENT_TYPE.STRING],
+                isRequired: true,
+                enumProvider: () => Array.from(document.querySelectorAll('#sd_comfy_workflow > [value]')).map(x => x.getAttribute('value')).map(workflow => new SlashCommandEnumValue(workflow)),
+            }),
         ],
         helpString: '(workflowName) - change the workflow to be used for image generation with ComfyUI, e.g. <pre><code>/imagine-comfy-workflow MyWorkflow</code></pre>',
     }));
@@ -3439,6 +3457,7 @@ jQuery(async () => {
     $('#sd_wand_visible').on('input', onWandVisibleInput);
     $('#sd_command_visible').on('input', onCommandVisibleInput);
     $('#sd_interactive_visible').on('input', onInteractiveVisibleInput);
+    $('#sd_swap_dimensions').on('click', onSwapDimensionsClick);
 
     $('.sd_settings .inline-drawer-toggle').on('click', function () {
         initScrollHeight($('#sd_prompt_prefix'));

@@ -35,8 +35,9 @@ import {
     extractTextFromOffice,
 } from './utils.js';
 import { extension_settings, renderExtensionTemplateAsync, saveMetadataDebounced } from './extensions.js';
-import { POPUP_RESULT, POPUP_TYPE, callGenericPopup } from './popup.js';
+import { POPUP_RESULT, POPUP_TYPE, Popup, callGenericPopup } from './popup.js';
 import { ScraperManager } from './scrapers.js';
+import { DragAndDropHandler } from './dragdrop.js';
 
 /**
  * @typedef {Object} FileAttachment
@@ -565,7 +566,7 @@ export function isExternalMediaAllowed() {
     return !power_user.forbid_external_media;
 }
 
-function enlargeMessageImage() {
+async function enlargeMessageImage() {
     const mesBlock = $(this).closest('.mes');
     const mesId = mesBlock.attr('mesid');
     const message = chat[mesId];
@@ -579,14 +580,28 @@ function enlargeMessageImage() {
     const img = document.createElement('img');
     img.classList.add('img_enlarged');
     img.src = imgSrc;
+    const imgHolder = document.createElement('div');
+    imgHolder.classList.add('img_enlarged_holder');
+    imgHolder.append(img);
     const imgContainer = $('<div><pre><code></code></pre></div>');
-    imgContainer.prepend(img);
+    imgContainer.prepend(imgHolder);
     imgContainer.addClass('img_enlarged_container');
     imgContainer.find('code').addClass('txt').text(title);
     const titleEmpty = !title || title.trim().length === 0;
     imgContainer.find('pre').toggle(!titleEmpty);
     addCopyToCodeBlocks(imgContainer);
-    callGenericPopup(imgContainer, POPUP_TYPE.TEXT, '', { wide: true, large: true });
+
+    const popup = new Popup(imgContainer, POPUP_TYPE.DISPLAY, '', { large: true, transparent: true });
+
+    popup.dlg.style.width = 'unset';
+    popup.dlg.style.height = 'unset';
+
+    img.addEventListener('click', () => {
+        const shouldZoom = !img.classList.contains('zoomed');
+        img.classList.toggle('zoomed', shouldZoom);
+    });
+
+    await popup.show();
 }
 
 async function deleteMessageImage() {
@@ -991,49 +1006,24 @@ async function openAttachmentManager() {
         template.find('.chatAttachmentsName').text(chatName);
     }
 
-    function addDragAndDrop() {
-        $(document.body).on('dragover', '.dialogue_popup', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            $(event.target).closest('.dialogue_popup').addClass('dragover');
+    const dragDropHandler = new DragAndDropHandler('.popup', async (files, event) => {
+        let selectedTarget = ATTACHMENT_SOURCE.GLOBAL;
+        const targets = getAvailableTargets();
+
+        const targetSelectTemplate = $(await renderExtensionTemplateAsync('attachments', 'files-dropped', { count: files.length, targets: targets }));
+        targetSelectTemplate.find('.droppedFilesTarget').on('input', function () {
+            selectedTarget = String($(this).val());
         });
-
-        $(document.body).on('dragleave', '.dialogue_popup', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            $(event.target).closest('.dialogue_popup').removeClass('dragover');
-        });
-
-        $(document.body).on('drop', '.dialogue_popup', async (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            $(event.target).closest('.dialogue_popup').removeClass('dragover');
-
-            const files = Array.from(event.originalEvent.dataTransfer.files);
-            let selectedTarget = ATTACHMENT_SOURCE.GLOBAL;
-            const targets = getAvailableTargets();
-
-            const targetSelectTemplate = $(await renderExtensionTemplateAsync('attachments', 'files-dropped', { count: files.length, targets: targets }));
-            targetSelectTemplate.find('.droppedFilesTarget').on('input', function () {
-                selectedTarget = String($(this).val());
-            });
-            const result = await callGenericPopup(targetSelectTemplate, POPUP_TYPE.CONFIRM, '', { wide: false, large: false, okButton: 'Upload', cancelButton: 'Cancel' });
-            if (result !== POPUP_RESULT.AFFIRMATIVE) {
-                console.log('File upload cancelled');
-                return;
-            }
-            for (const file of files) {
-                await uploadFileAttachmentToServer(file, selectedTarget);
-            }
-            renderAttachments();
-        });
-    }
-
-    function removeDragAndDrop() {
-        $(document.body).off('dragover', '.shadow_popup');
-        $(document.body).off('dragleave', '.shadow_popup');
-        $(document.body).off('drop', '.shadow_popup');
-    }
+        const result = await callGenericPopup(targetSelectTemplate, POPUP_TYPE.CONFIRM, '', { wide: false, large: false, okButton: 'Upload', cancelButton: 'Cancel' });
+        if (result !== POPUP_RESULT.AFFIRMATIVE) {
+            console.log('File upload cancelled');
+            return;
+        }
+        for (const file of files) {
+            await uploadFileAttachmentToServer(file, selectedTarget);
+        }
+        renderAttachments();
+    });
 
     let sortField = localStorage.getItem('DataBank_sortField') || 'created';
     let sortOrder = localStorage.getItem('DataBank_sortOrder') || 'desc';
@@ -1129,11 +1119,10 @@ async function openAttachmentManager() {
     const cleanupFn = await renderButtons();
     await verifyAttachments();
     await renderAttachments();
-    addDragAndDrop();
     await callGenericPopup(template, POPUP_TYPE.TEXT, '', { wide: true, large: true, okButton: 'Close' });
 
     cleanupFn();
-    removeDragAndDrop();
+    dragDropHandler.destroy();
 }
 
 /**

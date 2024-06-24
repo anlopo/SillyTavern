@@ -4,7 +4,27 @@ FROM node:lts-alpine3.18
 ARG APP_HOME=/home/node/app
 
 # Install system dependencies
-RUN apk --no-cache add gcompat tini git
+#RUN apk add --no-cache gcompat tini git
+
+# Install system dependencies with chromium headless
+RUN apk upgrade --no-cache --available \
+    && apk add --no-cache gcompat tini git \
+      chromium-swiftshader ttf-freefont \
+      font-noto-emoji \
+    && apk add --no-cache \
+      --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community \
+      font-wqy-zenhei
+
+# Font config for chromium headless
+COPY local.conf /etc/fonts/local.conf
+
+# ENVs for chromium headless and ST_SELENIUM
+ENV CHROME_BIN=/usr/bin/chromium-browser \
+    CHROME_PATH=/usr/lib/chromium/ \
+    CHROMIUM_FLAGS="--disable-software-rasterizer --disable-dev-shm-usage" \
+    ST_SELENIUM_BROWSER=chrome \
+    ST_SELENIUM_HEADLESS=true \
+    ST_SELENIUM_DEBUG=false
 
 # Clean image
 RUN rm -rf /usr/share/man /usr/share/doc /usr/share/info /var/cache/apk/*
